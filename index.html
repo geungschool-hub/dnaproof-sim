@@ -148,7 +148,10 @@ button.rstep{font:inherit;font-weight:700;font-size:15px;min-height:44px;}
    ★단 DOM 순서는 2단에 맞춰 「자료(왼쪽) → 조작(오른쪽)」으로 적혀 있다. 그대로 한 줄로 세우면
      주입 버튼보다 결과 무대가 위에 놓여, 누르고 나서 위로 되돌아가야 한다.
      display:contents 로 칸을 풀고 order 로 「조작 → 자료 → 문항」을 되세운다. */
-@media (max-width:1179px){
+/* ★1179.98px — 정수로 끊으면 1179 초과 1180 미만의 소수 폭(브라우저 확대에서 실제로 생긴다)이
+   두 규칙 어디에도 걸리지 않아 .panes 가 그냥 쌓이고 order 보정이 빠진다.
+   그러면 주입 단추보다 결과 무대가 위에 놓인다(2026-08-25 검토). */
+@media (max-width:1179.98px){
   .panes{display:flex;flex-direction:column;}
   .pane-r{display:contents;}
   .pr-do{order:1;}
@@ -611,10 +614,7 @@ html:not(.unlocked) #draftGate{display:flex;}
     </div>
     <div class="msg info" id="chLock"></div>
     <div id="chBody" style="display:none;">
-      <p class="sub" style="margin-top:10px;">
-        1행 <b>그리피스</b>는 완성된 예시로 채워 두었다. 그 네 칸을 먼저 읽고, 같은 방식으로 2행과 3행을 채우시오.
-        <b>덱의 카드 가운데는 판에 이미 있는 문장과 똑같은 것이 섞여 있다.</b> 왜 그런지 생각하며 놓으시오.
-      </p>
+      <p class="sub" id="chIntro" style="margin-top:10px;"></p>
       <div class="msg info" id="chHand"></div>
       <div class="chain-outer" id="chBoard"></div>
       <div class="chain-note" id="chWhy"></div>
@@ -2196,6 +2196,9 @@ function chLinkOn(link){
 
 /* ── 조작 ── */
 function chPickCard(inst){
+  /* ★완성한 뒤에는 집어도 놓을 칸이 없다(chTapSlot 이 chainOk 에서 되돌아간다).
+     그런데 트레이는 「놓을 칸을 탭하시오」라고 지시해 아무 일도 안 나는 상태가 됐다(2026-08-25 검토). */
+  if (state.chainOk) return;
   chHand = (chHand === inst) ? null : inst;
   renderChain();
 }
@@ -2312,7 +2315,7 @@ function renderChain(){
     if (chHand){
       tray.className = 'msg info';
       tray.innerHTML = '✋ <b>손에 든 카드</b> — ' + chCardText(chCardOf(chHand)) +
-                       ' &nbsp;<button type="button" class="btn ghost" style="min-height:38px;padding:5px 12px;font-size:14.5px;" onclick="chDrop()">내려놓기</button>' +
+                       ' &nbsp;<button type="button" class="btn ghost" style="padding:8px 14px;" onclick="chDrop()">내려놓기</button>' +
                        '<br><span style="font-size:14.5px;color:#555;">놓을 칸을 탭하시오.</span>';
     } else {
       tray.className = 'msg info';
@@ -2398,6 +2401,18 @@ function renderChain(){
   }
   var hb = document.getElementById('chHardBtn');
   if (hb) hb.textContent = state.chainHard ? '🔧 표준 난도로 (1행을 예시로 채운다)' : '🔧 더 어렵게 (1행도 비운다)';
+
+  /* ★안내문은 난도에 따라 달라져야 한다 — 붙박이로 두었더니 도전 난도에서 두 문장이 모두 거짓이 됐다.
+     도전 난도는 1행도 비우므로 「1행은 예시로 채워 두었다」가 틀리고,
+     덱에 판의 문장이 아니라 「같은 문장 두 장」이 들어가므로 단서를 가리키는 곳도 달라진다(2026-08-25 검토). */
+  var intro = document.getElementById('chIntro');
+  if (intro){
+    intro.innerHTML = state.chainHard
+      ? ('첫 칸 하나만 남기고 판을 <b>모두 비웠다.</b> 나머지 열한 칸을 직접 채우시오. ' +
+         '<b>덱에는 글자 하나 다르지 않은 같은 문장이 두 장 들어 있다.</b> 왜 그런지 생각하며 놓으시오.')
+      : ('1행 <b>그리피스</b>는 완성된 예시로 채워 두었다. 그 네 칸을 먼저 읽고, 같은 방식으로 2행과 3행을 채우시오. ' +
+         '<b>덱의 카드 가운데는 판에 이미 있는 문장과 똑같은 것이 섞여 있다.</b> 왜 그런지 생각하며 놓으시오.');
+  }
 
   /* ── 완성 후 ── */
   var done = document.getElementById('chDone');
@@ -2679,7 +2694,7 @@ function updateProgTags(){
   if (t2){
     var n = 0;
     WRITEQ.forEach(function(w){
-      if (((state.ta && state.ta[w.id]) || '').replace(/\s/g, '').length > 0) n++;
+      if (String((state.ta && state.ta[w.id]) || '').replace(/\s/g, '').length > 0) n++;
     });
     t2.textContent = '작성한 문항 ' + n + ' / ' + WRITEQ.length;
   }
@@ -2739,7 +2754,7 @@ function ansGate(id){
   var w = null;
   WRITEQ.forEach(function(x){ if (x.id === id) w = x; });
   if (!w) return { open:false, reason:'' };
-  var len = ((state.ta && state.ta[id]) || '').replace(/\s/g, '').length;
+  var len = String((state.ta && state.ta[id]) || '').replace(/\s/g, '').length;
   if (len >= w.min) return { open:true, reason:'' };
   return { open:false, reason:w.min + '자 이상 서술해야 열린다' };
 }
@@ -2770,7 +2785,7 @@ function toggleAns(id){
 function onTa(id){
   var el = document.getElementById('ta_' + id);
   if (!el) return;
-  var len = (el.value || '').replace(/\s/g, '').length;
+  var len = String(el.value || '').replace(/\s/g, '').length;
   var c = document.getElementById('cnt_' + id);
   if (c) c.textContent = len + '자';
   saveState();
@@ -2821,6 +2836,12 @@ function unlockDraft(){
 function resetAll(){
   if (!confirm('지금까지의 실험 결과와 서술을 모두 지우고 처음부터 다시 하시겠습니까?')) return;
   try{ localStorage.removeItem(LS_KEY); }catch(e){}
+  /* ★메모리도 함께 비운다 — 새로고침이 끝나기 전에 무엇이든 한 번 누르면
+     saveState() 가 옛 state 를 그대로 다시 써 버려 지운 것이 되살아난다(2026-08-25 검토). */
+  state = freshState();
+  chHand = null;
+  grPick = [];
+  ani = { st:null, id:null, ph:ANI_LAST, gen:ani.gen + 1, auto:false, reveal:false };
   if (typeof location !== 'undefined' && location.reload) location.reload();
 }
 
@@ -2838,9 +2859,9 @@ function restoreUI(){
   renderWrite();
   WRITEQ.forEach(function(w){
     var el = document.getElementById('ta_' + w.id);
-    if (el && state.ta && state.ta[w.id]) el.value = state.ta[w.id];
+    if (el && state.ta && state.ta[w.id]) el.value = String(state.ta[w.id]);
     var c = document.getElementById('cnt_' + w.id);
-    if (c && el) c.textContent = (el.value || '').replace(/\s/g, '').length + '자';
+    if (c && el) c.textContent = String(el.value || '').replace(/\s/g, '').length + '자';
   });
   Object.keys(state.self || {}).forEach(function(k){
     var s = document.getElementById('self_' + k);

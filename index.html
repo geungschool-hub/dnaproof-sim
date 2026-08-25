@@ -142,6 +142,8 @@ button.rstep{font:inherit;font-weight:700;font-size:15px;min-height:44px;}
   .pane-l svg.stage{min-width:0;}
   /* ★무대가 칸 폭을 다 먹으면 그만큼 키가 커져 아래의 결과표가 잘린다. 760px에서 멈춘다. */
   .pane-l .stage-wrap{max-width:760px;margin-left:auto;margin-right:auto;}
+  /* ⑥ 카드 덱은 오른쪽 칸 폭을 다 쓴다 — 340px 로 묶어 두면 줄이 더 접혀 덱이 길어진다 */
+  .pane-r .ccard{flex:1 1 100%;max-width:none;}
 }
 
 /* 좁은 화면(태블릿 세로·휴대전화) — 지금까지대로 위에서 아래로 한 줄이다.
@@ -610,28 +612,41 @@ html:not(.unlocked) #draftGate{display:flex;}
   </div>
 
   <!-- ══ ⑤ 논리 사슬판 ══ -->
-  <div class="card">
+  <div class="card split">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
       <h2 class="amber" style="flex:1 1 300px;margin-bottom:0;">⑤ 세 실험 잇기</h2>
       <span class="tag" id="chProg">놓은 칸 0 / 8</span>
     </div>
     <div class="msg info" id="chLock"></div>
     <div id="chBody" style="display:none;">
-      <p class="sub" id="chIntro" style="margin-top:10px;"></p>
-      <div class="msg info" id="chHand"></div>
-      <div class="chain-outer" id="chBoard"></div>
-      <div class="chain-note" id="chWhy"></div>
+      <div class="panes">
+        <!-- ── 왼쪽: 사슬판. 덱을 훑는 동안 사라지지 않는다 ── -->
+        <div class="pane-l">
+          <div class="chain-outer" id="chBoard"></div>
+          <div class="chain-note" id="chWhy"></div>
+        </div>
 
-      <h3>카드 덱</h3>
-      <div class="cardpool" id="chDeck"></div>
+        <!-- ── 오른쪽: 안내·손패 → 덱·단추 ── -->
+        <div class="pane-r">
+         <div class="pr-do">
+          <p class="sub" id="chIntro" style="margin-top:10px;"></p>
+          <div class="msg info" id="chHand"></div>
+         </div>
 
-      <div class="btnrow">
-        <button class="btn" id="chCheckBtn" onclick="chCheck()">🔗 사슬 이어 보기</button>
-        <button class="btn ghost" id="chHardBtn" onclick="chToggleHard()">🔧 더 어렵게 (1행도 비운다)</button>
-        <button class="btn gray" onclick="chReset()">이 판 다시 놓기</button>
+         <div class="pr-q">
+          <h3>카드 덱</h3>
+          <div class="cardpool" id="chDeck"></div>
+
+          <div class="btnrow">
+            <button class="btn" id="chCheckBtn" onclick="chCheck()">🔗 사슬 이어 보기</button>
+            <button class="btn ghost" id="chHardBtn" onclick="chToggleHard()">🔧 더 어렵게 (1행도 비운다)</button>
+            <button class="btn gray" onclick="chReset()">이 판 다시 놓기</button>
+          </div>
+          <div class="msg info hide" id="chMsg"></div>
+          <div class="handoff hide" id="chDone"></div>
+         </div>
+        </div>
       </div>
-      <div class="msg info hide" id="chMsg"></div>
-      <div class="handoff hide" id="chDone"></div>
     </div>
   </div>
 
@@ -2167,9 +2182,32 @@ function chPlacedInsts(){
   Object.keys(state.chain).forEach(function(sid){ used[state.chain[sid]] = true; });
   return used;
 }
+/* ★덱을 섞어서 낸다 (교사 지시 2026-08-25 「카드가 안 섞여 있으니 찾는 맛도 안 난다」).
+   CH_CARDS 차례대로 내면 정답 카드가 판에 놓을 순서 그대로 줄지어 나와 고를 것이 없었다.
+   ★한 번 섞은 차례는 state.deckOrder 에 남긴다 — 카드를 놓을 때마다 다시 섞이면 눈이 따라가지 못한다.
+     난도를 바꾸면 덱의 구성 자체가 달라지므로(아래 검사) 그때는 다시 섞는다. */
+function chShuffledAll(){
+  var all = chDeckAll();
+  var order = state.deckOrder;
+  var same = !!order && order.length === all.length;
+  if (same){
+    var seen = {};
+    order.forEach(function(x){ seen[x] = true; });
+    for (var k = 0; k < all.length; k++){ if (!seen[all[k]]){ same = false; break; } }
+  }
+  if (!same){
+    order = all.slice();
+    for (var i = order.length - 1; i > 0; i--){
+      var j = (typeof Math.random === 'function') ? Math.floor(Math.random() * (i + 1)) : 0;
+      var t = order[i]; order[i] = order[j]; order[j] = t;
+    }
+    state.deckOrder = order;
+  }
+  return order;
+}
 function chDeck(){
   var used = chPlacedInsts();
-  return chDeckAll().filter(function(inst){ return !used[inst]; });
+  return chShuffledAll().filter(function(inst){ return !used[inst]; });
 }
 function chBlanks(){
   return chAllSlots().filter(function(s){ return !chIsPreset(s); });
@@ -2289,6 +2327,7 @@ function chToggleHard(){
   state.chainHard = next;
   state.chain = {};
   state.chainOk = false;
+  state.deckOrder = null;          /* 구성이 달라지므로 다시 섞는다 */
   chHand = null; chFb = {};
   saveState();
   renderChain();
@@ -2297,12 +2336,14 @@ function chToggleHard(){
 }
 function chReset(){
   /* ★여기도 같다 — 완성한 뒤에 지우면 ⑥이 함께 잠긴다 */
+  /* 다시 놓을 때는 덱도 다시 섞는다 — 같은 자리에 같은 카드가 있으면 다시 하는 뜻이 옅다 */
   if (!confirm(state.chainOk
       ? '지금까지 놓은 카드를 모두 지우면 사슬을 완성한 기록도 사라진다.\n' +
         '⑥ 연습 문항이 다시 잠긴다 — 사슬을 다시 완성하면 열린다.\n처음부터 다시 하시겠습니까?'
       : '지금까지 놓은 카드를 모두 지우고 처음부터 다시 하시겠습니까?')) return;
   state.chain = {};
   state.chainOk = false;
+  state.deckOrder = null;
   chHand = null; chFb = {};
   saveState();
   renderChain();
@@ -2483,7 +2524,8 @@ function freshState(){
     ta:{},           /* ⑦ 서술형 */
     self:{},         /* 자기평가 체크 */
     teacherUnlock:false,
-    seq:0            /* ★저장할 때마다 하나씩 오른다 — 두 탭이 서로를 지우지 않게 하는 표다 */
+    seq:0,           /* ★저장할 때마다 하나씩 오른다 — 두 탭이 서로를 지우지 않게 하는 표다 */
+    deckOrder:null   /* ★한 번 섞은 덱의 차례. 다시 그릴 때 카드가 흔들리지 않게 남긴다 */
   };
 }
 var state = freshState();
@@ -2936,6 +2978,9 @@ function init(){
   ['grRun','grPre','avRun','hcRun','qPick','chain','pPick','ta','self'].forEach(function(k){
     if (!state[k] || typeof state[k] !== 'object' || Array.isArray(state[k])) state[k] = {};
   });
+  /* ★deckOrder 는 배열이라 위 병합이 걸러낸다(거기는 객체만 받는다) — 따로 되살린다.
+     배열이 아니면 null 로 두어 다시 섞게 한다. */
+  state.deckOrder = (saved && Array.isArray(saved.deckOrder)) ? saved.deckOrder.slice() : null;
   state.chainOk = !!state.chainOk;
   state.chainHard = !!state.chainHard;
   state.teacherUnlock = !!state.teacherUnlock;

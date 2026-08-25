@@ -398,6 +398,9 @@ html:not(.unlocked) #draftGate{display:flex;}
 <body>
 <div class="wrap">
 
+  <!-- ★다른 탭이 더 새로운 것을 저장했을 때만 뜬다. 평소에는 숨어 있다. -->
+  <div class="msg bad hide" id="tabWarn"></div>
+
   <!-- ══ 머리 ══ -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
@@ -2479,11 +2482,20 @@ function freshState(){
     pPick:{},        /* ⑥ 연습 문항 */
     ta:{},           /* ⑦ 서술형 */
     self:{},         /* 자기평가 체크 */
-    teacherUnlock:false
+    teacherUnlock:false,
+    seq:0            /* ★저장할 때마다 하나씩 오른다 — 두 탭이 서로를 지우지 않게 하는 표다 */
   };
 }
 var state = freshState();
 
+/* ★두 탭이 서로를 지우던 문제 (2026-08-25 검토에서 재현됨)
+   이 활동은 state 를 통째로 한 칸에 저장한다. 탭마다 state 는 「열 때 읽은 스냅숏」이라
+   다른 탭이 그 뒤에 무엇을 썼는지 알 방법이 없어, 마지막에 저장한 탭이 무조건 이겼다.
+   ★특히 나쁜 길: 새로 연 두 번째 탭은 ③④⑤⑥이 잠겨 있어도 ⑦ 정리하기는 처음부터 열려 있다.
+     그 칸에 한 글자만 쳐도 saveState 가 돌아 앞 탭의 실험 결과·사슬·문항이 통째로 지워졌다.
+   → 저장할 때마다 seq 를 올리고, **저장소의 seq 가 내 것보다 크면 덮어쓰지 않는다.**
+     대신 학생에게 알린다. 조용히 잃는 것보다 낫다.
+   ★옛 저장분에는 seq 가 없다 — 그때는 그냥 저장한다(뒤로 호환). 무슨 예외가 나도 저장은 한다. */
 function saveState(){
   try{
     var ta = {};
@@ -2492,8 +2504,31 @@ function saveState(){
       if (el) ta[w.id] = el.value;
     });
     state.ta = ta;
+
+    var mine = (typeof state.seq === 'number') ? state.seq : 0;
+    var newer = false;
+    try{
+      var raw = localStorage.getItem(LS_KEY);
+      if (raw){
+        var stored = JSON.parse(raw);
+        if (stored && typeof stored.seq === 'number' && stored.seq > mine) newer = true;
+      }
+    }catch(e2){ newer = false; }      /* 읽다 실패하면 막지 않는다 */
+
+    if (newer){ warnOtherTab(true); return; }
+
+    state.seq = mine + 1;
     localStorage.setItem(LS_KEY, JSON.stringify(state));
   }catch(e){}
+}
+function warnOtherTab(on){
+  var el = document.getElementById('tabWarn');
+  if (!el) return;
+  el.className = 'msg bad' + (on ? '' : ' hide');
+  if (on){
+    el.innerHTML = '⚠ 이 활동이 <b>다른 탭에서도 열려 있다.</b> 이 탭에서 한 것은 저장되지 않는다.<br>' +
+                   '탭을 하나만 남기고 새로고침하시오.';
+  }
 }
 function loadState(){
   try{

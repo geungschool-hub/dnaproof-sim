@@ -2276,7 +2276,12 @@ function chCheck(){
 function chToggleHard(){
   var next = !state.chainHard;
   if (chFilledCount() > 0 || state.chainOk){
-    if (!confirm('난도를 바꾸면 지금 놓은 카드가 모두 지워진다. 바꾸시겠습니까?')) return;
+    /* ★사슬을 완성한 뒤라면 chainOk 가 꺼지면서 ⑥ 연습 문항도 함께 잠긴다.
+       문구가 그 사실을 말하지 않아 학생이 모르고 눌렀다(2026-08-25 검토). */
+    if (!confirm(state.chainOk
+        ? '난도를 바꾸면 지금 놓은 카드가 모두 지워지고 사슬을 완성한 기록도 사라진다.\n' +
+          '⑥ 연습 문항이 다시 잠긴다 — 새 난도로 사슬을 완성하면 다시 열린다.\n바꾸시겠습니까?'
+        : '난도를 바꾸면 지금 놓은 카드가 모두 지워진다. 바꾸시겠습니까?')) return;
   }
   state.chainHard = next;
   state.chain = {};
@@ -2288,7 +2293,11 @@ function chToggleHard(){
   updateLocks();
 }
 function chReset(){
-  if (!confirm('지금까지 놓은 카드를 모두 지우고 처음부터 다시 하시겠습니까?')) return;
+  /* ★여기도 같다 — 완성한 뒤에 지우면 ⑥이 함께 잠긴다 */
+  if (!confirm(state.chainOk
+      ? '지금까지 놓은 카드를 모두 지우면 사슬을 완성한 기록도 사라진다.\n' +
+        '⑥ 연습 문항이 다시 잠긴다 — 사슬을 다시 완성하면 열린다.\n처음부터 다시 하시겠습니까?'
+      : '지금까지 놓은 카드를 모두 지우고 처음부터 다시 하시겠습니까?')) return;
   state.chain = {};
   state.chainOk = false;
   chHand = null; chFb = {};
